@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": ".",
+		},
+		{
+		    "name": "Needle Engine",
+			"path": "./node_modules/@needle-tools/engine",
+		}
+	],
+	"settings": {
+	    "window.title": "Template - ${rootName}${separator}${activeEditorShort}",		
+		"files.exclude": {
+			"**/.DS_Store": true,
+			"**/*.meta": true
+		}
+	}
+}

@@ -1,0 +1,63 @@
+# ── Unity ───────────────────────────────────────────────────────────────────
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Asset meta files for folders that are themselves ignored
+!/[Aa]ssets/**/*.meta
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity crash reports
+sysinfo.txt
+crashlytics-build.properties
+
+# ── Needle Engine web project ───────────────────────────────────────────────
+node_modules/
+dist/
+.vite/
+include/
+src/generated/
+
+# Needle exports the scene into assets/ on every build — generated, not source.
+assets/*.glb
+assets/*.gltf
+assets/*.bin
+
+# ── Secrets ─────────────────────────────────────────────────────────────────
+# Never commit MultiSet credentials. They live in the Inspector on MultisetVPS,
+# which means they end up in the scene file — see the README before committing a
+# scene you have put real credentials into.
+.env
+.env.local
+*.credentials.json
+
+# ── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
