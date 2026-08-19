@@ -55,6 +55,14 @@ assets/*.bin
 .env.local
 *.credentials.json
 
+# ── Tooling, not part of the sample ─────────────────────────────────────────
+# Needle generates agent skill docs into the web project. Useful locally, but it is
+# tooling documentation rather than anything this sample demonstrates.
+Needle/WebScene/.agents/
+
+# Editor workspace files are personal to whoever created them.
+*.code-workspace
+
 # ── OS ──────────────────────────────────────────────────────────────────────
 .DS_Store
 .DS_Store?

@@ -604,15 +604,36 @@ Your origin is not whitelisted. Developer portal → **Credentials → Settings 
 ```bash
 cd Needle/WebScene
 npm install @multisetai/vps@latest
-cd ../..
-./sync-sdk-templates.sh          # re-copies the four SDK-owned templates
-cd Needle/WebScene
 npx vite --host --force          # discard the stale dep cache
 ```
 
-`sync-sdk-templates.sh` only touches `MultisetVPS.ts`, `MapSpace.ts`, `MapAnchor.ts`, `MapType.ts`
-and `Assets/MapType.cs`. It reports anything it changed, and never overwrites the sample's own
-scripts. Review the diff before committing — you may have customised those files.
+The `--force` matters: `npm install` rewrites `node_modules` while Vite may still be serving a
+pre-bundled copy of the old package, and a plain restart does not always discard it.
+
+### The SDK-owned files
+
+Five files in this project are **copies of SDK templates**, not sample code. Needle's Unity codegen
+only scans your own project, so they have to exist as local files rather than package imports:
+
+| File | Location |
+|---|---|
+| `MultisetVPS.ts` | `Needle/WebScene/src/scripts/` |
+| `MapSpace.ts` | `Needle/WebScene/src/scripts/` |
+| `MapAnchor.ts` | `Needle/WebScene/src/scripts/` |
+| `MapType.ts` | `Needle/WebScene/src/scripts/` |
+| `MapType.cs` | `Assets/` |
+
+They are checked in so this sample is clone-and-run, which means they can fall behind the installed
+package after an upgrade. The originals ship inside the package, so compare and refresh them from
+there when you upgrade:
+
+```bash
+# from the repository root, after npm install
+diff -r Needle/WebScene/node_modules/@multisetai/vps/templates Needle/WebScene/src/scripts
+```
+
+Copy over only what you need. If you have customised any of them, merge rather than overwrite: your
+edits are yours, and nothing in this repository will replace them for you.
 
 ---
 
