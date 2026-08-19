@@ -10,7 +10,7 @@
     "build:dev": "vite build"
   },
   "dependencies": {
-    "@multisetai/vps": "^2.4.0",
+    "@multisetai/vps": "^2.4.1",
     "@needle-tools/engine": "5.1.12",
     "three": "npm:@needle-tools/three@0.169.19",
     "three-pathfinding": "^1.3.0"
