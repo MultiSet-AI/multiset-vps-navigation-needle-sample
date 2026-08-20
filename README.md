@@ -468,11 +468,78 @@ For the reverse direction, use the **On Navigation Started / Stopped / Arrived**
 | How the path is drawn at all | `NavigationVisuals.ts` → `PathView`, `createPathArrowMaterial` |
 | POI label design — icons per type, thumbnails, prefabs | `NavigationVisuals.ts` → `LabelsView` |
 | The destination panel and HUD | `NavigationPanel.ts` |
-| Replace the UI entirely | Untick **Use Default UI**, subscribe to `navigation.on(...)` |
+| Replace the UI entirely | Untick **Use Default UI** and see [Build your own UI](#build-your-own-ui) |
 
 The path mesh uses `buildPathRibbon` from the SDK, whose vertex contract is stable API: **`uv.x` =
 distance along the path in metres** (not normalised), **`uv.y` = 0…1 across the width**. Any shader
 honouring that will work.
+
+## Customize the AR and capture buttons
+
+Those buttons are **not** from the SDK. `MultisetVPS` passes `useDefaultButton: false` and builds its
+own in `_createUI()`, so everything on screen lives in `MultisetVPS.ts`:
+
+| Button | Appears when | Does |
+|---|---|---|
+| `START AR` / `STOP AR` | always | Toggles the XR session. Label swapped in `_onSessionStart()` / `_onSessionEnd()` |
+| `CAPTURE FRAME` | Map Type is `SingleMap` or `MapSet` | Runs one localization. Reads `LOCALIZING...` and disables itself while in flight, then `_resetCaptureButton()` restores it |
+| `TRACK OBJECT` | Map Type is `ObjectTracking` | Runs one detection pass |
+| `CLEAR MESHES` | Map Type is `ObjectTracking` | Removes placed object meshes |
+
+Edit `_createUI()` to change layout, styling, or which buttons exist. The `base` style string near the
+top of that method is shared by all of them, so change it once to restyle the whole set.
+
+The navigation UI is separate: the destinations button and HUD come from `NavigationPanel.ts`, not
+from here. See [Build your own UI](#build-your-own-ui).
+
+> ⚠️ `startSession()` must be the **first** call in a click handler. Any `await` before it consumes
+> the browser's user activation token and the session request is rejected. There is a comment above
+> `_createUI()` saying the same thing, because it is easy to break by adding a permission check or a
+> fetch first.
+
+> `MultisetVPS.ts` is one of the SDK template files. If you upgrade `@multisetai/vps` and refresh the
+> templates, your `_createUI()` edits are in the file being replaced, so merge rather than overwrite.
+> See [Updating the SDK](#updating-the-sdk).
+
+## Build your own UI
+
+The 3D visuals and the UI are separate, so you can replace one and keep the other.
+
+**To restyle the existing panel**, edit `NavigationPanel.ts`. It is plain DOM with no framework: a
+destination list, a progress HUD, and toasts, driven entirely by `Navigation` events.
+
+**To replace it completely**, untick **Use Default UI** on `Multiset Navigation`. The path, arrows,
+and POI labels keep working; nothing DOM is created. Then build your own against the component's
+`navigation` property:
+
+```ts
+const nav = myNavigationComponent.navigation;   // null until setup completes
+
+// Sort destinations by walking distance. distanceTo() is cached and throttled
+// internally, so polling every POI on a timer is inexpensive.
+const sorted = [...nav.pois]
+  .map(poi => ({ poi, distance: nav.distanceTo(poi) }))
+  .filter(e => e.distance >= 0)        // -1 means unreachable, or not known yet
+  .sort((a, b) => a.distance - b.distance);
+
+nav.setDestination(sorted[0].poi);
+
+nav.on('pathUpdated', ({ remainingDistance }) => updateHud(remainingDistance));
+nav.on('arrived', poi => toast(`Arrived at ${poi.name}`));
+nav.on('unreachable', poi => toast(`No route to ${poi.name}`));
+```
+
+**Mount it in the WebXR DOM overlay**, not the page body. In `immersive-ar` the WebGL canvas
+receives no pointer events, so UI appended anywhere else renders but never responds to taps:
+
+```ts
+const root = adapter.getSession().getOverlayRoot() ?? document.body;
+```
+
+`NavigationPanel.ts` does exactly this, so read it as the reference. The
+[navigation guide](https://docs.multiset.ai/multiset/webxr-sdk/navigation#building-your-own-ui) covers
+the event ordering worth knowing about, in particular how to baseline a progress bar so it does not
+jump backwards when a route is recalculated.
 
 ## Drive it from code
 
