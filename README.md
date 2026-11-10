@@ -27,6 +27,7 @@ Built with [`@multisetai/vps`](https://www.npmjs.com/package/@multisetai/vps) an
   - [Scene structure](#scene-structure)
   - [The files](#the-files)
   - [Inspector reference](#inspector-reference)
+  - [Runtime settings panel](#runtime-settings-panel)
 - [Part 3 — Customising](#part-3--customising)
 - [Troubleshooting](#troubleshooting)
 - [Updating the SDK](#updating-the-sdk)
@@ -112,13 +113,17 @@ Open **`Assets/Scenes/SampleScene.unity`**.
 
 ## 3. Add your credentials
 
-In the Hierarchy, select **`MultisetVPS`** and fill in three fields:
+In the Hierarchy, select **`MultisetVPS`** and fill in **Map Code**, plus **one** way to sign in:
 
 | Inspector field | Where to get it |
 |---|---|
-| **Client Id** | Developer portal → **Credentials** |
-| **Client Secret** | Developer portal → **Credentials** |
 | **Map Code** | Developer portal → your map. Looks like `MAP_XXXXXXXXXXXX` |
+| **Client Id** + **Client Secret** | Developer portal → **Credentials**. Quickest for trying the sample, but both end up in the page — prototyping only |
+| **Token Url** | **Or** the address of a token endpoint on your own server, which returns `{ token, expiresOn }`. The secret stays on your server. Leave Client Id and Client Secret empty |
+
+Token Url takes precedence when both are set. Setting up the endpoint is covered in
+[Authentication](https://docs.multiset.ai/web-sdk/webxr-sdk/authentication); it must allow your
+app's origin with CORS headers if it runs on another host or port.
 
 Leave **Map Type** as `SingleMap`.
 
@@ -141,8 +146,9 @@ Two related fields on the same component:
 | **Show Gizmo** | A small coordinate-axis marker at the map origin. Useful for seeing where Y = 0 actually is, and how the axes are oriented |
 
 > ⚠️ **Credentials end up in the scene file.** They are Inspector values, so
-> `Assets/Scenes/SampleScene.unity` will contain them once you save. Do not push that to a public
-> repository.
+> `Assets/Scenes/SampleScene.unity` will contain them once you save, and the exported page ships
+> them to every visitor. Do not push that to a public repository, and switch to **Token Url**
+> before you publish.
 
 ## 4. Whitelist your domain (CORS)
 
@@ -321,14 +327,16 @@ In order:
 4. **On screen:** the scanned map mesh overlaid on the real room (because `Show Mesh` is on), a
    translucent green navmesh overlay, and floating name labels above each POI
 5. The bottom button changes from `LOCALIZING…` to **`DESTINATIONS`**
+6. A **gear button** in the top-right corner (there since authorization) opens the
+   [runtime settings panel](#runtime-settings-panel)
 
 Then:
 
-6. Tap **DESTINATIONS** → your POIs, sorted nearest-first with live distances
-7. Pick one → a cyan arrowed ribbon appears on the floor, arrows flowing toward the destination, and
+7. Tap **DESTINATIONS** → your POIs, sorted nearest-first with live distances
+8. Pick one → a cyan arrowed ribbon appears on the floor, arrows flowing toward the destination, and
    a HUD shows the name, remaining distance and a progress bar
-8. Walk toward it → distance counts down, the bar fills
-9. Get within 1.5 m → arrival toast, ribbon disappears
+9. Walk toward it → distance counts down, the bar fills
+10. Get within 1.5 m → arrival toast, ribbon disappears
 
 **Check the console for `[NavMeshPathfinder] The navmesh has N disconnected regions`.** On a
 single-floor space you want no such warning — see
@@ -354,7 +362,7 @@ SampleScene
 │       ├── Kitchen             MapPOI
 │       ├── Desk                MapPOI
 │       └── Entrance            MapPOI
-└── Multiset Navigation         MultisetNavigation — OUTSIDE Map Space
+└── Multiset Navigation         MultisetNavigation + VPSSettings — OUTSIDE Map Space
 ```
 
 **Why `Map Space` matters.** On every localization it is moved so its origin matches the scanned
@@ -376,6 +384,8 @@ Everything in `Needle/WebScene/src/scripts/` is TypeScript you own.
 | `NavigationPanel.ts` | The destination picker, progress HUD and toasts. Plain DOM, no framework |
 | `MapPOI.ts` | One navigable destination |
 | `MapPOIType.ts` | The POI kind dropdown (paired with `Assets/MapPOIType.cs`) |
+| `VPSSettings.ts` | The runtime settings panel's component: finds `MultisetVPS` and applies panel changes through the SDK setters |
+| `VPSSettingsPanel.ts` | The panel itself. Plain DOM, no SDK or Needle import, so you can restyle or replace it freely |
 
 ### SDK templates — sync, don't diverge
 
@@ -424,6 +434,43 @@ The arrow's aspect ratio comes from **Arrow Length** ÷ **Path Width**, so at th
 match width) a square texture is undistorted. For non-square art, set Arrow Length to
 `pathWidth × (textureWidth / textureHeight)`.
 
+### `MultisetVPS`
+
+Sign-in fields are covered in [3. Add your credentials](#3-add-your-credentials). The rest, with
+`0` or empty meaning the SDK or server default:
+
+| Field | Default | What it does |
+|---|---|---|
+| **Map Type** | `SingleMap` | `SingleMap`, `MapSet` or `ObjectTracking` |
+| **Show Mesh** | on | The purple + yellow-grid overlay of the scanned map. Turn **off** for production |
+| **Occlusion** | off | Render the map mesh as an invisible occluder, so real walls hide content behind them. Takes precedence over Show Mesh |
+| **Use Active Map Version** | off | For a versioned map, load the newest active scan's mesh (beta) |
+| **Show Gizmo** | on | Axis marker at the map origin |
+| **Auto Localize** | on | Localize once when the AR session starts |
+| **Relocalization** | off | Localize again after tracking is lost, the app is switched away from, or the session resets |
+| **Background Localization** / **Interval** | off / `30` s | Keep localizing on a timer (10–180 s) |
+| **Confidence Check** / **Threshold** | off / `0.5` | Reject poses below the threshold (0.2–0.8) |
+| **Deep Search** | off | Use the VPS-2 engine for every query: up to 15% higher recall, about 2 s per query |
+| **Search Depth** | `0` | How far the search reaches inside the map, 1–5. Raise only for large maps that return no pose |
+| **Query Mode Fallback** | off | Retry a missed VPS-1 query once with VPS-2, on the same frame |
+| **Use Last Pose As Hint** | off | After a fix, send the device position as the hint for later queries |
+| **First Localization Until Success** | off | Retry a failed first localization (up to 5 times) before reporting it |
+| **Multi Frame** / **Count** / **Interval Ms** | off / `4` / `500` | Capture 4–6 frames and query them together: more robust, slower |
+| **Hint Position** / **Hint Radius** | — / `25` | Narrow the search to a radius (5–100 m) around `x,y,z` |
+| **Hint Map Codes** | — | Map sets only: restrict the search to these maps |
+| **Convert To Geo Coordinates**, **Pass Geo Pose**, **Use 2D Filtering** | off | Geo-referenced maps only |
+
+Each one is explained in the
+[Localization Options](https://docs.multiset.ai/web-sdk/webxr-sdk/features/localization-options) guide.
+
+### `VPSSettings`
+
+| Field | Default | What it does |
+|---|---|---|
+| **Show Panel** | off | Show the runtime settings panel. This sample turns it on |
+| **Start Collapsed** | on | Start as a gear button instead of the open panel |
+| **Align Left** | off | Pin the panel to the top-left corner instead of the top-right |
+
 ### `MapPOI`
 
 | Field | Default | What it does |
@@ -433,6 +480,28 @@ match width) a square texture is undistorted. For non-square art, set Arrow Leng
 | **Poi Type** | `Room` | Kind of place. Purely descriptive — use it to pick an icon |
 | **Arrival Radius** | `0` | Per-POI override. `0` = use the global value |
 | **Description** | — | Free text for your own UI |
+
+## Runtime settings panel
+
+`VPSSettings` puts a gear button over the AR view. The panel changes localization options during
+a session, so you can compare them on site without re-exporting from Unity:
+
+| Section | Controls |
+|---|---|
+| **Display** | Occlusion, Show mesh |
+| **Search** | Deep search (VPS-2), Search depth, Fall back to VPS-2 |
+| **Hints** | Use last pose as hint, Clear hints |
+| **Capture** | Multi-frame |
+
+**Localize now** runs a localization with the current settings, and the panel shows what the last
+query did. Settings the SDK reads only at startup are listed read-only under **Set in the
+Inspector**.
+
+Panel changes last for the page load only. They are never written back to the Inspector or the
+scene, so the Inspector values stay the starting point.
+
+To ship without the panel, untick **Show Panel**. Adding `?vpssettings` to the page URL still
+shows it in any build, which is handy for testing a deployed app.
 
 ---
 
