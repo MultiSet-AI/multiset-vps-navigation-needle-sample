@@ -150,9 +150,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Needle.Typescript.GeneratedComponents.MultisetVPS
   clientId: 
   clientSecret: 
+  tokenUrl: 
   mapCode: 
   mapType: 0
-  showMesh: 0
+  showMesh: 1
+  occlusion: 0
+  useActiveMapVersion: 0
   showGizmo: 1
   showObjectMeshes: 0
   autoLocalize: 1
@@ -162,12 +165,20 @@ MonoBehaviour:
   confidenceCheck: 0
   confidenceThreshold: 0.3
   poseTimeoutMs: 0
+  queryModeFallback: 0
+  useLastPoseAsHint: 0
+  firstLocalizationUntilSuccess: 0
+  multiFrame: 0
+  multiFrameCount: 0
+  multiFrameIntervalMs: 0
   convertToGeoCoordinates: 0
   passGeoPose: 0
   use2DFiltering: 0
   hintPosition: 
   hintRadius: 0
   hintMapCodes: 
+  deepSearch: 0
+  searchDepth: 0
   autoTracking: 0
   restartTracking: 0
   trackingCaptureDelayMs: 0
@@ -890,6 +901,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1076842527}
   - component: {fileID: 1076842526}
+  - component: {fileID: 1076842528}
   m_Layer: 0
   m_Name: Multiset Navigation
   m_TagString: Untagged
@@ -951,6 +963,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1076842528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1076842525}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 470f25cd09a888cd1a77192192e06ae4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Needle.Typescript.GeneratedComponents.VPSSettings
+  showPanel: 1
+  startCollapsed: 1
+  alignLeft: 0
 --- !u!1 &1371525461
 GameObject:
   m_ObjectHideFlags: 0

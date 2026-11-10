@@ -30,12 +30,24 @@ import { NeedleAdapter } from "@multisetai/vps/needle";
 export class MultisetVPS extends Behaviour {
 
     // ── Credentials ──────────────────────────────────────────────────────────
+    //
+    // Use EITHER tokenUrl (production) OR clientId + clientSecret (prototyping).
+    // When tokenUrl is set, clientId and clientSecret are ignored.
 
+    /** Client ID. Ends up in the page source, so use for prototyping only. */
     @serializable()
     clientId: string = "";
 
+    /** Client secret. Ends up in the page source, so use for prototyping only. */
     @serializable()
     clientSecret: string = "";
+
+    /**
+     * URL of your own backend endpoint that returns a MultiSet token as JSON with token and expiresOn.
+     * Keeps the client secret off the page. Takes precedence over clientId / clientSecret.
+     */
+    @serializable()
+    tokenUrl: string = "";
 
     // ── Map / object config ───────────────────────────────────────────────────
     //
@@ -59,6 +71,17 @@ export class MultisetVPS extends Behaviour {
     /** Overlay the scanned map mesh after localization (VPS modes only). */
     @serializable()
     showMesh: boolean = true;
+
+    /**
+     * Load the map mesh as an invisible occluder so virtual content behind real walls is hidden
+     * (VPS modes only). Takes precedence over showMesh - the mesh itself is not drawn.
+     */
+    @serializable()
+    occlusion: boolean = false;
+
+    /** For a versioned map, show the newest active scan's mesh instead of the base scan's (VPS modes). */
+    @serializable()
+    useActiveMapVersion: boolean = false;
 
     /** Show a coordinate-axis gizmo at the map origin after localization (VPS modes only). */
     @serializable()
@@ -98,6 +121,30 @@ export class MultisetVPS extends Behaviour {
     @serializable()
     poseTimeoutMs: number = 0;
 
+    /** Retry a missed or low-confidence VPS-1 query once with VPS-2 deep search, on the same frame. */
+    @serializable()
+    queryModeFallback: boolean = false;
+
+    /** After a fix, send the device position as the hint for later queries (within hintRadius, default 25 m). */
+    @serializable()
+    useLastPoseAsHint: boolean = false;
+
+    /** Silently retry a failed first localization of the session (up to 5 times) before reporting it. */
+    @serializable()
+    firstLocalizationUntilSuccess: boolean = false;
+
+    /** Capture several frames per localization and query them together: more robust, slower. */
+    @serializable()
+    multiFrame: boolean = false;
+
+    /** Frames per multi-frame localization (4–6). 0 = SDK default (4). */
+    @serializable()
+    multiFrameCount: number = 0;
+
+    /** Ms between multi-frame captures (400–800). 0 = SDK default (500). */
+    @serializable()
+    multiFrameIntervalMs: number = 0;
+
     // ── VPS client options ────────────────────────────────────────────────────
 
     /** Request geographic coordinates in the localization response. */
@@ -116,13 +163,21 @@ export class MultisetVPS extends Behaviour {
     @serializable()
     hintPosition: string = "";
 
-    /** Search radius in metres around hintPosition. 0 = no hint. */
+    /** Search radius in metres (5–100) around hintPosition. 0 = server default (25 m). */
     @serializable()
     hintRadius: number = 0;
 
     /** Comma-separated map codes to restrict search (map-set mode only). */
     @serializable()
     hintMapCodes: string = "";
+
+    /** Use the VPS-2 deep search engine for every query: up to 15% higher recall, about 2 s per query. */
+    @serializable()
+    deepSearch: boolean = false;
+
+    /** How far the search reaches inside the map, 1–5. 0 = server default (1). Raise only for large maps. */
+    @serializable()
+    searchDepth: number = 0;
 
     // ── Object tracking options ───────────────────────────────────────────────
 
@@ -156,17 +211,29 @@ export class MultisetVPS extends Behaviour {
      */
     get adapter(): NeedleAdapter | null { return this._adapter; }
 
+    /**
+     * The MultisetClient. Use it from other components to change hints or query options at
+     * runtime. Null until start() creates it; prefer waiting for adapter, which means it authorized.
+     */
+    get client(): MultisetClient | null { return this._client; }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     awake() {
         // Early warning — Inspector fields are read-only here; just validate.
-        if (!this.clientId || !this.clientSecret || !this.mapCode) {
-            console.warn("[MultisetVPS] clientId, clientSecret, and mapCode must be set in the Inspector.");
+        if (!this.hasConfig()) {
+            console.warn("[MultisetVPS] Set mapCode plus either tokenUrl or clientId + clientSecret in the Inspector.");
         }
     }
 
+    /** True when the map code and one credential option (tokenUrl, or clientId + clientSecret) are set. */
+    private hasConfig(): boolean {
+        const hasCredentials = !!this.tokenUrl.trim() || (!!this.clientId && !!this.clientSecret);
+        return hasCredentials && !!this.mapCode;
+    }
+
     async start() {
-        if (!this.clientId || !this.clientSecret || !this.mapCode) return;
+        if (!this.hasConfig()) return;
 
         const isOT = this.mapType === MapType.ObjectTracking;
         const isMapSet = this.mapType === MapType.MapSet;
@@ -185,9 +252,12 @@ export class MultisetVPS extends Behaviour {
         // ── 1. Create the HTTP client ─────────────────────────────────────────
         // isRightHanded: true tells the API to return poses in a right-handed
         // (Three.js / WebXR) coordinate system. Do not change this.
+        // tokenUrl keeps the secret on your backend; the SDK refreshes tokens from it.
+        const tokenUrl = this.tokenUrl.trim();
         this._client = new MultisetClient({
-            clientId: this.clientId,
-            clientSecret: this.clientSecret,
+            ...(tokenUrl
+                ? { tokenUrl }
+                : { clientId: this.clientId, clientSecret: this.clientSecret }),
             isRightHanded: true,
             ...(isOT
                 ? {
@@ -203,6 +273,8 @@ export class MultisetVPS extends Behaviour {
                     hintPosition,
                     hintRadius,
                     ...(hintMapCodes ? { hintMapCodes } : {}),
+                    ...(this.deepSearch ? { queryMode: "vps-2" } : {}),
+                    ...(this.searchDepth > 0 ? { depth: Math.round(this.searchDepth) } : {}),
                 }),
         } as IMultisetClientConfig);
 
@@ -217,6 +289,8 @@ export class MultisetVPS extends Behaviour {
         this._adapter = new NeedleAdapter({
             client: this._client,
             showMesh: !isOT && this.showMesh,
+            occlusion: !isOT && this.occlusion,
+            useActiveMapVersion: !isOT && this.useActiveMapVersion,
             showGizmo: !isOT && this.showGizmo,
             showObjectMeshes: isOT && this.showObjectMeshes,
             useDefaultButton: false,
@@ -228,6 +302,12 @@ export class MultisetVPS extends Behaviour {
                 confidenceCheck: this.confidenceCheck,
                 confidenceThreshold: this.confidenceThreshold,
                 poseTimeoutMs: this.poseTimeoutMs > 0 ? this.poseTimeoutMs : undefined,
+                queryModeFallback: !isOT && this.queryModeFallback,
+                useLastPoseAsHint: !isOT && this.useLastPoseAsHint,
+                firstLocalizationUntilSuccess: !isOT && this.firstLocalizationUntilSuccess,
+                localizationMode: !isOT && this.multiFrame ? "multi-frame" : "single-frame",
+                multiFrameCount: this.multiFrameCount > 0 ? this.multiFrameCount : undefined,
+                multiFrameIntervalMs: this.multiFrameIntervalMs > 0 ? this.multiFrameIntervalMs : undefined,
                 autoTracking: isOT && this.autoTracking,
                 restartTracking: isOT && this.restartTracking,
                 trackingCaptureDelayMs: isOT && this.trackingCaptureDelayMs > 0 ? this.trackingCaptureDelayMs : undefined,
